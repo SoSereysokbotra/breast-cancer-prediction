@@ -1,9 +1,10 @@
 """
 model/train.py
-Breast Cancer Wisconsin — Logistic Regression Training Script with MLflow Tracking
+Breast Cancer Wisconsin — Model Training Script with MLflow Tracking
 Loads data from: data.csv  (id, diagnosis[M/B], 30 features)
 """
 
+import json
 import os
 import joblib
 import numpy as np
@@ -13,9 +14,11 @@ import seaborn as sns
 import mlflow
 import mlflow.sklearn
 
-from sklearn.model_selection import train_test_split
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -37,6 +40,7 @@ os.makedirs(ARTIFACT_DIR, exist_ok=True)
 MODEL_PATH  = os.path.join(ARTIFACT_DIR, "model.pkl")
 SCALER_PATH = os.path.join(ARTIFACT_DIR, "scaler.pkl")
 CM_PATH     = os.path.join(ARTIFACT_DIR, "confusion_matrix.png")
+METADATA_PATH = os.path.join(ARTIFACT_DIR, "model_metadata.json")
 
 
 # ─────────────────────────────────────────────
@@ -60,6 +64,36 @@ def plot_confusion_matrix(cm: np.ndarray, labels: list, save_path: str) -> None:
     plt.savefig(save_path, dpi=150)
     plt.close(fig)
     print(f"[INFO] Confusion matrix saved -> {save_path}")
+
+
+def build_model_searches() -> dict:
+    """Return candidate models and compact hyperparameter grids."""
+    return {
+        "logistic_regression": {
+            "estimator": LogisticRegression(max_iter=10000, random_state=42),
+            "params": {
+                "C": [0.1, 1.0, 10.0],
+                "solver": ["lbfgs"],
+                "class_weight": [None, "balanced"],
+            },
+        },
+        "svm_rbf": {
+            "estimator": SVC(kernel="rbf", probability=True, random_state=42),
+            "params": {
+                "C": [1.0, 5.0, 10.0],
+                "gamma": ["scale", 0.01],
+                "class_weight": [None, "balanced"],
+            },
+        },
+        "gradient_boosting": {
+            "estimator": GradientBoostingClassifier(random_state=42),
+            "params": {
+                "n_estimators": [100],
+                "learning_rate": [0.05, 0.1],
+                "max_depth": [2, 3],
+            },
+        },
+    }
 
 
 # ─────────────────────────────────────────────
@@ -105,59 +139,106 @@ def train() -> None:
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled  = scaler.transform(X_test)
 
-    # 4. Model hyper-parameters
-    C        = 1.0
-    max_iter = 10000
-    solver   = "lbfgs"
+    # 4. Model selection via cross-validation
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    searches = build_model_searches()
+
+    best_name = None
+    best_search = None
+    model_scores = {}
+
+    print("\n[INFO] Running model selection with 5-fold cross-validation...")
+    for name, config in searches.items():
+        search = GridSearchCV(
+            estimator=config["estimator"],
+            param_grid=config["params"],
+            scoring="roc_auc",
+            cv=cv,
+            n_jobs=1,
+            refit=True,
+        )
+        search.fit(X_train_scaled, y_train)
+        model_scores[name] = {
+            "best_cv_roc_auc": float(search.best_score_),
+            "best_params": search.best_params_,
+        }
+        print(
+            f"[CV] {name:<20} ROC-AUC={search.best_score_:.4f} "
+            f"params={search.best_params_}"
+        )
+
+        if best_search is None or search.best_score_ > best_search.best_score_:
+            best_name = name
+            best_search = search
+
+    model = best_search.best_estimator_
+    best_params = best_search.best_params_
+    best_cv_roc_auc = float(best_search.best_score_)
 
     # ──────────────────────────────────────────
     # 5. MLflow experiment
     # ──────────────────────────────────────────
-    mlflow.set_experiment("breast-cancer-logistic-regression")
+    mlflow.set_experiment("breast-cancer-model-selection")
 
-    with mlflow.start_run(run_name="logistic-regression-run") as run:
+    with mlflow.start_run(run_name=f"best-{best_name}") as run:
         print(f"\n[MLflow] Run ID: {run.info.run_id}")
 
-        # 5a. Train model
-        model = LogisticRegression(C=C, max_iter=max_iter, solver=solver, random_state=42)
-        model.fit(X_train_scaled, y_train)
-
-        # 5b. Predictions
+        # 5a. Predictions
         y_pred      = model.predict(X_test_scaled)
         y_pred_prob = model.predict_proba(X_test_scaled)[:, 1]   # prob of Malignant (class 1)
 
-        # 5c. Compute metrics
+        # 5b. Compute metrics
         accuracy  = accuracy_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred)
         recall    = recall_score(y_test, y_pred)
         f1        = f1_score(y_test, y_pred)
         roc_auc   = roc_auc_score(y_test, y_pred_prob)
 
-        # 5d. Log parameters
-        mlflow.log_param("C",            C)
-        mlflow.log_param("max_iter",     max_iter)
-        mlflow.log_param("solver",       solver)
+        # 5c. Log parameters
+        mlflow.log_param("best_model",    best_name)
+        mlflow.log_param("best_params",   json.dumps(best_params))
         mlflow.log_param("test_size",    0.2)
         mlflow.log_param("random_state", 42)
         mlflow.log_param("dataset",      "data.csv")
+        mlflow.log_param("cv_folds",     5)
 
-        # 5e. Log metrics
+        # 5d. Log metrics
+        mlflow.log_metric("best_cv_roc_auc", best_cv_roc_auc)
         mlflow.log_metric("accuracy",  accuracy)
         mlflow.log_metric("precision", precision)
         mlflow.log_metric("recall",    recall)
         mlflow.log_metric("f1_score",  f1)
         mlflow.log_metric("roc_auc",   roc_auc)
 
-        # 5f. Confusion matrix PNG
+        # 5e. Confusion matrix PNG
         cm = confusion_matrix(y_test, y_pred)
         plot_confusion_matrix(cm, labels=target_names, save_path=CM_PATH)
 
-        # 5g. Save & log artifacts
+        metadata = {
+            "best_model": best_name,
+            "best_params": best_params,
+            "cv_scores": model_scores,
+            "test_metrics": {
+                "accuracy": float(accuracy),
+                "precision": float(precision),
+                "recall": float(recall),
+                "f1_score": float(f1),
+                "roc_auc": float(roc_auc),
+            },
+            "feature_count": len(feature_cols),
+            "target_encoding": {"Benign": 0, "Malignant": 1},
+        }
+
+        with open(METADATA_PATH, "w", encoding="utf-8") as metadata_file:
+            json.dump(metadata, metadata_file, indent=2)
+
+        # 5f. Save & log artifacts
         joblib.dump(model,  MODEL_PATH)
         joblib.dump(scaler, SCALER_PATH)
         mlflow.log_artifact(CM_PATH, artifact_path="plots")
         mlflow.log_artifact(MODEL_PATH,  artifact_path="artifacts")
         mlflow.log_artifact(SCALER_PATH, artifact_path="artifacts")
+        mlflow.log_artifact(METADATA_PATH, artifact_path="artifacts")
 
         # ──────────────────────────────────────
         # 6. Print results to console
@@ -165,6 +246,8 @@ def train() -> None:
         print("\n" + "=" * 55)
         print("  MODEL PERFORMANCE METRICS")
         print("=" * 55)
+        print(f"  Best Model: {best_name}")
+        print(f"  CV ROC-AUC : {best_cv_roc_auc:.4f}")
         print(f"  Accuracy  : {accuracy:.4f}  ({accuracy*100:.2f}%)")
         print(f"  Precision : {precision:.4f}")
         print(f"  Recall    : {recall:.4f}")
@@ -176,7 +259,8 @@ def train() -> None:
 
         print(f"\n[INFO] Model saved   -> {MODEL_PATH}")
         print(f"[INFO] Scaler saved  -> {SCALER_PATH}")
-        print(f"[MLflow] Experiment  -> breast-cancer-logistic-regression")
+        print(f"[INFO] Metadata saved-> {METADATA_PATH}")
+        print(f"[MLflow] Experiment  -> breast-cancer-model-selection")
         print(f"[MLflow] Run ID      -> {run.info.run_id}")
         print("\n[INFO] Training complete! Run `mlflow ui` to view the experiment.")
 

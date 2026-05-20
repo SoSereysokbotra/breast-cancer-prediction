@@ -1,0 +1,46 @@
+{
+  "best_model": "svm_rbf",
+  "best_params": {
+    "C": 5.0,
+    "class_weight": null,
+    "gamma": 0.01
+  },
+  "cv_scores": {
+    "logistic_regression": {
+      "best_cv_roc_auc": 0.9957688338493291,
+      "best_params": {
+        "C": 1.0,
+        "class_weight": null,
+        "solver": "lbfgs"
+      }
+    },
+    "svm_rbf": {
+      "best_cv_roc_auc": 0.9959752321981424,
+      "best_params": {
+        "C": 5.0,
+        "class_weight": null,
+        "gamma": 0.01
+      }
+    },
+    "gradient_boosting": {
+      "best_cv_roc_auc": 0.9909184726522188,
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 2,
+        "n_estimators": 100
+      }
+    }
+  },
+  "test_metrics": {
+    "accuracy": 0.9824561403508771,
+    "precision": 1.0,
+    "recall": 0.9523809523809523,
+    "f1_score": 0.975609756097561,
+    "roc_auc": 0.9973544973544973
+  },
+  "feature_count": 30,
+  "target_encoding": {
+    "Benign": 0,
+    "Malignant": 1
+  }
+}

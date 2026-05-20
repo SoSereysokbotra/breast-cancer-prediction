@@ -106,15 +106,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 with st.sidebar:
     st.markdown("### Model Information")
     st.markdown("""
-    This application utilizes a **Logistic Regression** model trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
+    This application utilizes a tuned **RBF Support Vector Machine** model trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
     
     **Instructions:**
     Use **Load Sample Data** or **Random Patient Profile** to auto-populate the assessment fields. Manual entry is reserved for users with active lab measurements.
 
     **Performance Metrics:**
-    * **Accuracy:** 96.49%
-    * **Precision:** 97.50%
-    * **ROC-AUC:** 99.60%
+    * **Accuracy:** 98.25%
+    * **Precision:** 100.00%
+    * **ROC-AUC:** 99.74%
     """)
     st.divider()
     st.caption("Group 2 · Machine Learning Project\nBreast Cancer Wisconsin Dataset")
@@ -123,7 +123,7 @@ with st.sidebar:
 # Main Header
 # ─────────────────────────────────────────────
 st.markdown('<div class="main-title">Diagnostic Risk Assessment</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Logistic Regression Engine · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Tuned SVM Engine · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="info-box">

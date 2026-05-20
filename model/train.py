@@ -15,6 +15,7 @@ import mlflow
 import mlflow.sklearn
 
 from sklearn.ensemble import ExtraTreesClassifier, GradientBoostingClassifier, VotingClassifier
+from sklearn.base import clone
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -187,13 +188,16 @@ def train() -> None:
         search.fit(X_train_scaled, y_train)
         candidate = search.best_estimator_
         candidate_pred = candidate.predict(X_test_scaled)
-        candidate_prob = candidate.predict_proba(X_test_scaled)[:, 1]
+        candidate_prob_all = candidate.predict_proba(X_test_scaled)
+        candidate_prob = candidate_prob_all[:, 1]
         candidate_metrics = {
             "accuracy": float(accuracy_score(y_test, candidate_pred)),
             "precision": float(precision_score(y_test, candidate_pred)),
             "recall": float(recall_score(y_test, candidate_pred)),
             "f1_score": float(f1_score(y_test, candidate_pred)),
             "roc_auc": float(roc_auc_score(y_test, candidate_prob)),
+            "avg_confidence": float(candidate_prob_all.max(axis=1).mean()),
+            "low_confidence_count": int((candidate_prob_all.max(axis=1) < 0.80).sum()),
         }
         model_scores[name] = {
             "best_cv_f1": float(search.best_score_),
@@ -229,6 +233,13 @@ def train() -> None:
     model = best_search.best_estimator_
     best_params = best_search.best_params_
     best_cv_f1 = float(best_search.best_score_)
+
+    # Refit the selected model on every available row before saving it for the app.
+    # The holdout metrics above remain the honest evaluation numbers.
+    final_scaler = StandardScaler()
+    X_scaled = final_scaler.fit_transform(X)
+    final_model = clone(model)
+    final_model.fit(X_scaled, y)
 
     # ──────────────────────────────────────────
     # 5. MLflow experiment
@@ -275,6 +286,7 @@ def train() -> None:
             "best_params": best_params,
             "cv_scores": model_scores,
             "selection_metric": "holdout_accuracy",
+            "saved_model_training": "refit_on_full_dataset_after_holdout_evaluation",
             "test_metrics": {
                 "accuracy": float(accuracy),
                 "precision": float(precision),
@@ -290,8 +302,8 @@ def train() -> None:
             json.dump(metadata, metadata_file, indent=2)
 
         # 5f. Save & log artifacts
-        joblib.dump(model,  MODEL_PATH)
-        joblib.dump(scaler, SCALER_PATH)
+        joblib.dump(final_model,  MODEL_PATH)
+        joblib.dump(final_scaler, SCALER_PATH)
         mlflow.log_artifact(CM_PATH, artifact_path="plots")
         mlflow.log_artifact(MODEL_PATH,  artifact_path="artifacts")
         mlflow.log_artifact(SCALER_PATH, artifact_path="artifacts")

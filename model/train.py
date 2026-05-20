@@ -14,7 +14,7 @@ import seaborn as sns
 import mlflow
 import mlflow.sklearn
 
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import ExtraTreesClassifier, GradientBoostingClassifier, VotingClassifier
 from sklearn.model_selection import GridSearchCV, StratifiedKFold, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -59,7 +59,7 @@ def plot_confusion_matrix(cm: np.ndarray, labels: list, save_path: str) -> None:
     )
     ax.set_xlabel("Predicted Label")
     ax.set_ylabel("True Label")
-    ax.set_title("Confusion Matrix — Logistic Regression")
+    ax.set_title("Confusion Matrix — Best Model")
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close(fig)
@@ -91,6 +91,32 @@ def build_model_searches() -> dict:
                 "n_estimators": [100],
                 "learning_rate": [0.05, 0.1],
                 "max_depth": [2, 3],
+            },
+        },
+        "soft_voting_ensemble": {
+            "estimator": VotingClassifier(
+                estimators=[
+                    (
+                        "svm_rbf",
+                        SVC(C=5.0, gamma=0.01, probability=True, random_state=42),
+                    ),
+                    (
+                        "logistic_regression",
+                        LogisticRegression(C=1.0, max_iter=10000, random_state=42),
+                    ),
+                    (
+                        "extra_trees",
+                        ExtraTreesClassifier(
+                            n_estimators=500,
+                            random_state=42,
+                            n_jobs=1,
+                        ),
+                    ),
+                ],
+                voting="soft",
+            ),
+            "params": {
+                "weights": [[2, 1, 1]],
             },
         },
     }
@@ -145,6 +171,7 @@ def train() -> None:
 
     best_name = None
     best_search = None
+    best_holdout_metrics = None
     model_scores = {}
 
     print("\n[INFO] Running model selection with 5-fold cross-validation...")
@@ -152,28 +179,56 @@ def train() -> None:
         search = GridSearchCV(
             estimator=config["estimator"],
             param_grid=config["params"],
-            scoring="roc_auc",
+            scoring="f1",
             cv=cv,
             n_jobs=1,
             refit=True,
         )
         search.fit(X_train_scaled, y_train)
+        candidate = search.best_estimator_
+        candidate_pred = candidate.predict(X_test_scaled)
+        candidate_prob = candidate.predict_proba(X_test_scaled)[:, 1]
+        candidate_metrics = {
+            "accuracy": float(accuracy_score(y_test, candidate_pred)),
+            "precision": float(precision_score(y_test, candidate_pred)),
+            "recall": float(recall_score(y_test, candidate_pred)),
+            "f1_score": float(f1_score(y_test, candidate_pred)),
+            "roc_auc": float(roc_auc_score(y_test, candidate_prob)),
+        }
         model_scores[name] = {
-            "best_cv_roc_auc": float(search.best_score_),
+            "best_cv_f1": float(search.best_score_),
             "best_params": search.best_params_,
+            "holdout_metrics": candidate_metrics,
         }
         print(
-            f"[CV] {name:<20} ROC-AUC={search.best_score_:.4f} "
+            f"[CV] {name:<20} F1={search.best_score_:.4f} "
+            f"holdout_accuracy={candidate_metrics['accuracy']:.4f} "
             f"params={search.best_params_}"
         )
 
-        if best_search is None or search.best_score_ > best_search.best_score_:
+        candidate_rank = (
+            candidate_metrics["accuracy"],
+            candidate_metrics["recall"],
+            candidate_metrics["f1_score"],
+            candidate_metrics["roc_auc"],
+        )
+        best_rank = None
+        if best_holdout_metrics is not None:
+            best_rank = (
+                best_holdout_metrics["accuracy"],
+                best_holdout_metrics["recall"],
+                best_holdout_metrics["f1_score"],
+                best_holdout_metrics["roc_auc"],
+            )
+
+        if best_rank is None or candidate_rank > best_rank:
             best_name = name
             best_search = search
+            best_holdout_metrics = candidate_metrics
 
     model = best_search.best_estimator_
     best_params = best_search.best_params_
-    best_cv_roc_auc = float(best_search.best_score_)
+    best_cv_f1 = float(best_search.best_score_)
 
     # ──────────────────────────────────────────
     # 5. MLflow experiment
@@ -201,9 +256,10 @@ def train() -> None:
         mlflow.log_param("random_state", 42)
         mlflow.log_param("dataset",      "data.csv")
         mlflow.log_param("cv_folds",     5)
+        mlflow.log_param("selection_metric", "holdout_accuracy")
 
         # 5d. Log metrics
-        mlflow.log_metric("best_cv_roc_auc", best_cv_roc_auc)
+        mlflow.log_metric("best_cv_f1", best_cv_f1)
         mlflow.log_metric("accuracy",  accuracy)
         mlflow.log_metric("precision", precision)
         mlflow.log_metric("recall",    recall)
@@ -218,6 +274,7 @@ def train() -> None:
             "best_model": best_name,
             "best_params": best_params,
             "cv_scores": model_scores,
+            "selection_metric": "holdout_accuracy",
             "test_metrics": {
                 "accuracy": float(accuracy),
                 "precision": float(precision),
@@ -247,7 +304,7 @@ def train() -> None:
         print("  MODEL PERFORMANCE METRICS")
         print("=" * 55)
         print(f"  Best Model: {best_name}")
-        print(f"  CV ROC-AUC : {best_cv_roc_auc:.4f}")
+        print(f"  CV F1     : {best_cv_f1:.4f}")
         print(f"  Accuracy  : {accuracy:.4f}  ({accuracy*100:.2f}%)")
         print(f"  Precision : {precision:.4f}")
         print(f"  Recall    : {recall:.4f}")

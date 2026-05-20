@@ -37,10 +37,38 @@ FEATURE_NAMES = [c for c in df.columns if c != "diagnosis"]
 _mins         = df[FEATURE_NAMES].min().values
 _maxs         = df[FEATURE_NAMES].max().values
 _means        = df[FEATURE_NAMES].mean().values
+HIGH_CONFIDENCE_THRESHOLD = 0.80
+MODERATE_CONFIDENCE_THRESHOLD = 0.65
 
 # Known sample rows
 _mal_row = df[df["diagnosis"] == 1].iloc[0][FEATURE_NAMES].tolist()
 _ben_row = df[df["diagnosis"] == 0].iloc[0][FEATURE_NAMES].tolist()
+
+
+def confidence_level(probability):
+    if probability >= HIGH_CONFIDENCE_THRESHOLD:
+        return "high"
+    if probability >= MODERATE_CONFIDENCE_THRESHOLD:
+        return "moderate"
+    return "borderline"
+
+
+def result_message(prediction, malignant_prob, benign_prob):
+    predicted_prob = malignant_prob if prediction == 1 else benign_prob
+    level = confidence_level(predicted_prob)
+
+    if prediction == 1:
+        if level == "high":
+            return "warning", "The model indicates a high probability of malignancy. Medical review is recommended."
+        if level == "moderate":
+            return "warning", "The model leans malignant with moderate confidence. Additional clinical review is recommended."
+        return "warning", "The model slightly leans malignant, but confidence is borderline. Please review the measurements and confirm with clinical evaluation."
+
+    if level == "high":
+        return "success", "The model indicates a high probability of a benign tumor. Routine observation may be appropriate in an educational demo context."
+    if level == "moderate":
+        return "info", "The model leans benign with moderate confidence. Consider reviewing the inputs before relying on this result."
+    return "warning", "The model slightly leans benign, but confidence is borderline. This should not be treated as a strong benign result."
 
 # ─────────────────────────────────────────────
 # Professional Custom CSS
@@ -106,15 +134,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 with st.sidebar:
     st.markdown("### Model Information")
     st.markdown("""
-    This application utilizes a tuned **RBF Support Vector Machine** model trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
+    This application utilizes a tuned **soft-voting ensemble** trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
     
     **Instructions:**
     Use **Load Sample Data** or **Random Patient Profile** to auto-populate the assessment fields. Manual entry is reserved for users with active lab measurements.
 
     **Performance Metrics:**
-    * **Accuracy:** 98.25%
+    * **Accuracy:** 99.12%
     * **Precision:** 100.00%
-    * **ROC-AUC:** 99.74%
+    * **ROC-AUC:** 99.83%
     """)
     st.divider()
     st.caption("Group 2 · Machine Learning Project\nBreast Cancer Wisconsin Dataset")
@@ -123,7 +151,7 @@ with st.sidebar:
 # Main Header
 # ─────────────────────────────────────────────
 st.markdown('<div class="main-title">Diagnostic Risk Assessment</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Tuned SVM Engine · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Soft-Voting Ensemble · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="info-box">
@@ -236,6 +264,9 @@ if predict_clicked:
                 prediction = result.get("prediction")
                 label      = result.get("label", "")
                 prob       = result.get("probability", {})
+                m_prob     = prob.get("malignant", 0)
+                b_prob     = prob.get("benign", 0)
+                result_kind, guidance = result_message(prediction, m_prob, b_prob)
 
                 st.markdown("---")
                 st.markdown("### Assessment Results")
@@ -243,10 +274,15 @@ if predict_clicked:
                 # Diagnostic Output
                 if prediction == 1:
                     st.markdown(f'<div class="alert-card alert-malignant">Diagnosis Indication: {label.upper()}</div>', unsafe_allow_html=True)
-                    st.warning("The model indicates a high probability of malignancy. Immediate oncology review is recommended.")
                 else:
                     st.markdown(f'<div class="alert-card alert-benign">Diagnosis Indication: {label.upper()}</div>', unsafe_allow_html=True)
-                    st.success("The model indicates a high probability of a benign tumor. Routine observation is advised.")
+
+                if result_kind == "success":
+                    st.success(guidance)
+                elif result_kind == "info":
+                    st.info(guidance)
+                else:
+                    st.warning(guidance)
 
                 # Accuracy Check against Dataset
                 if true_label:
@@ -258,9 +294,6 @@ if predict_clicked:
 
                 # Probability Dashboard
                 st.markdown("#### Confidence Metrics")
-                
-                m_prob = prob.get("malignant", 0)
-                b_prob = prob.get("benign", 0)
                 
                 metric_col1, metric_col2 = st.columns(2)
                 with metric_col1:

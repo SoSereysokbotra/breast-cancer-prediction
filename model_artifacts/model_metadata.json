@@ -1,42 +1,83 @@
 {
-  "best_model": "svm_rbf",
+  "best_model": "soft_voting_ensemble",
   "best_params": {
-    "C": 5.0,
-    "class_weight": null,
-    "gamma": 0.01
+    "weights": [
+      2,
+      1,
+      1
+    ]
   },
   "cv_scores": {
     "logistic_regression": {
-      "best_cv_roc_auc": 0.9957688338493291,
+      "best_cv_f1": 0.9671455449666695,
       "best_params": {
-        "C": 1.0,
-        "class_weight": null,
+        "C": 0.1,
+        "class_weight": "balanced",
         "solver": "lbfgs"
+      },
+      "holdout_metrics": {
+        "accuracy": 0.9912280701754386,
+        "precision": 1.0,
+        "recall": 0.9761904761904762,
+        "f1_score": 0.9879518072289156,
+        "roc_auc": 0.9976851851851852
       }
     },
     "svm_rbf": {
-      "best_cv_roc_auc": 0.9959752321981424,
+      "best_cv_f1": 0.9731208995353745,
       "best_params": {
         "C": 5.0,
         "class_weight": null,
-        "gamma": 0.01
+        "gamma": "scale"
+      },
+      "holdout_metrics": {
+        "accuracy": 0.9736842105263158,
+        "precision": 1.0,
+        "recall": 0.9285714285714286,
+        "f1_score": 0.9629629629629629,
+        "roc_auc": 0.9947089947089948
       }
     },
     "gradient_boosting": {
-      "best_cv_roc_auc": 0.9909184726522188,
+      "best_cv_f1": 0.9552837817600958,
       "best_params": {
         "learning_rate": 0.1,
-        "max_depth": 2,
+        "max_depth": 3,
         "n_estimators": 100
+      },
+      "holdout_metrics": {
+        "accuracy": 0.9649122807017544,
+        "precision": 1.0,
+        "recall": 0.9047619047619048,
+        "f1_score": 0.95,
+        "roc_auc": 0.9947089947089948
+      }
+    },
+    "soft_voting_ensemble": {
+      "best_cv_f1": 0.9697549589713768,
+      "best_params": {
+        "weights": [
+          2,
+          1,
+          1
+        ]
+      },
+      "holdout_metrics": {
+        "accuracy": 0.9912280701754386,
+        "precision": 1.0,
+        "recall": 0.9761904761904762,
+        "f1_score": 0.9879518072289156,
+        "roc_auc": 0.9983465608465609
       }
     }
   },
+  "selection_metric": "holdout_accuracy",
   "test_metrics": {
-    "accuracy": 0.9824561403508771,
+    "accuracy": 0.9912280701754386,
     "precision": 1.0,
-    "recall": 0.9523809523809523,
-    "f1_score": 0.975609756097561,
-    "roc_auc": 0.9973544973544973
+    "recall": 0.9761904761904762,
+    "f1_score": 0.9879518072289156,
+    "roc_auc": 0.9983465608465609
   },
   "feature_count": 30,
   "target_encoding": {

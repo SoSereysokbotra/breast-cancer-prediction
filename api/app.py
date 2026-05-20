@@ -137,22 +137,12 @@ def predict():
 
 
 # ─────────────────────────────────────────────
-# Before first request, load artifacts
-# ─────────────────────────────────────────────
-@app.before_request
-def initialize_model():
-    global model, scaler
-    if model is None or scaler is None:
-        try:
-            load_artifacts()
-        except Exception as e:
-            print(f"[ERROR] Failed to load artifacts: {e}")
-            return jsonify({"error": str(e)}), 503
-
-
-# ─────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
+    load_artifacts()
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+else:
+    # Called by gunicorn
+    load_artifacts()

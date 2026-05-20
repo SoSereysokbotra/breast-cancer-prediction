@@ -1,4 +1,5 @@
 import os
+import random
 import requests
 import numpy as np
 import pandas as pd
@@ -17,21 +18,15 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 # Constants & Data Loading
 # ─────────────────────────────────────────────
-API_URL = os.environ.get(
-    "API_URL",
-    "http://127.0.0.1:8000/predict",
-)
-
-_UI_DIR   = os.path.dirname(os.path.abspath(__file__))
-_PROJ_DIR = os.path.dirname(_UI_DIR)
-_DATA_CSV = os.path.join(_PROJ_DIR, "data.csv")
+_UI_DIR  = os.path.dirname(os.path.abspath(__file__))
+_PROJ    = os.path.dirname(_UI_DIR)
+_CSV     = os.path.normpath(os.path.join(_PROJ, "data.csv"))
+API_URL  = os.environ.get("API_URL", "http://127.0.0.1:8000/predict")
 
 @st.cache_data
 def load_dataset():
-    """Load data.csv once and cache it."""
-    path = os.path.normpath(_DATA_CSV)
-    df   = pd.read_csv(path)
-    df   = df.loc[:, ~df.columns.str.contains("^Unnamed")]
+    df = pd.read_csv(_CSV)
+    df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
     if "id" in df.columns:
         df = df.drop(columns=["id"])
     df["diagnosis"] = df["diagnosis"].map({"M": 1, "B": 0})
@@ -43,233 +38,261 @@ _mins         = df[FEATURE_NAMES].min().values
 _maxs         = df[FEATURE_NAMES].max().values
 _means        = df[FEATURE_NAMES].mean().values
 
-# Sample rows
-_malignant_row = df[df["diagnosis"] == 1].iloc[0][FEATURE_NAMES].tolist()
-_benign_row    = df[df["diagnosis"] == 0].iloc[0][FEATURE_NAMES].tolist()
+# Known sample rows
+_mal_row = df[df["diagnosis"] == 1].iloc[0][FEATURE_NAMES].tolist()
+_ben_row = df[df["diagnosis"] == 0].iloc[0][FEATURE_NAMES].tolist()
 
 # ─────────────────────────────────────────────
 # Professional Custom CSS
 # ─────────────────────────────────────────────
-st.markdown(
-    """
-    <style>
-        /* Typography and Spacing */
-        .main-header {
-            font-size: 2.2rem;
-            font-weight: 300;
-            color: #1E3A8A; /* Clinical Blue */
-            margin-bottom: 0px;
-            padding-bottom: 0px;
-        }
-        .sub-header {
-            font-size: 1.1rem;
-            font-weight: 400;
-            color: #64748B; /* Slate Gray */
-            margin-bottom: 2rem;
-            margin-top: 5px;
-        }
-        
-        /* Clean Alert Boxes */
-        .alert-card {
-            padding: 1.5rem;
-            border-radius: 6px;
-            margin-bottom: 1.5rem;
-            font-size: 1.2rem;
-            font-weight: 600;
-        }
-        .alert-malignant {
-            background-color: #FEF2F2;
-            border-left: 6px solid #DC2626;
-            color: #991B1B;
-        }
-        .alert-benign {
-            background-color: #F0FDF4;
-            border-left: 6px solid #16A34A;
-            color: #166534;
-        }
-        
-        /* Subtle Disclaimer */
-        .disclaimer-text {
-            font-size: 0.85rem;
-            color: #94A3B8;
-            text-align: center;
-            margin-top: 3rem;
-            border-top: 1px solid #E2E8F0;
-            padding-top: 1rem;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+.main-title {
+    font-size: 2.2rem; 
+    font-weight: 600;
+    color: #0F172A; /* Slate 900 */
+    margin-bottom: 0.2rem;
+}
+.sub-title {
+    color: #64748B; /* Slate 500 */
+    font-size: 1rem; 
+    margin-bottom: 2rem;
+}
+.alert-card {
+    padding: 1.25rem 1.5rem; 
+    border-radius: 6px; 
+    margin: 1.5rem 0;
+    font-size: 1.2rem; 
+    font-weight: 600;
+    border-left: 6px solid;
+}
+.alert-malignant {
+    background-color: #FEF2F2;
+    color: #991B1B;
+    border-color: #DC2626;
+}
+.alert-benign {
+    background-color: #F0FDF4;
+    color: #166534;
+    border-color: #16A34A;
+}
+.info-box {
+    background: #F8FAFC; 
+    border-left: 4px solid #3B82F6;
+    border-radius: 4px; 
+    padding: 1rem 1.2rem; 
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem; 
+    color: #334155;
+}
+.disclaimer {
+    text-align: center; 
+    color: #94A3B8; 
+    font-size: 0.8rem;
+    border-top: 1px solid #E2E8F0; 
+    padding-top: 1rem; 
+    margin-top: 3rem;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Model Information")
-    st.markdown(
-        """
-        This assessment tool utilizes a **Logistic Regression** model trained on the 
-        **Breast Cancer Wisconsin (Diagnostic)** dataset to evaluate tumor characteristics.
-
-        **Specifications:**
-        * **Algorithm:** Logistic Regression
-        * **Feature Count:** 30 Clinical Metrics
-        * **Accuracy:** ~97%
-        * **Infrastructure:** scikit-learn + MLflow
-        """
-    )
-    st.divider()
+    st.markdown("""
+    This application utilizes a **Logistic Regression** model trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
     
-    with st.expander("View Feature Glossary"):
-        for i, name in enumerate(FEATURE_NAMES, 1):
-            st.markdown(f"`{i:02d}.` {name}")
+    **Instructions:**
+    Use **Load Sample Data** or **Random Patient Profile** to auto-populate the assessment fields. Manual entry is reserved for users with active lab measurements.
 
+    **Performance Metrics:**
+    * **Accuracy:** 96.49%
+    * **Precision:** 97.50%
+    * **ROC-AUC:** 99.60%
+    """)
     st.divider()
-    st.caption("Group 2 — Machine Learning Project")
+    st.caption("Group 2 · Machine Learning Project\nBreast Cancer Wisconsin Dataset")
 
 # ─────────────────────────────────────────────
-# Main Layout
+# Main Header
 # ─────────────────────────────────────────────
-st.markdown('<div class="main-header">Breast Cancer Risk Assessment Tool</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Diagnostic prediction via logistic regression modeling</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Diagnostic Risk Assessment</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Logistic Regression Engine · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
 
-# Input mode selection (Placed outside the form so it updates defaults instantly)
+st.markdown("""
+<div class="info-box">
+<strong>Notice:</strong> For demonstration purposes, you may load pre-configured clinical profiles or draw a random patient record from the dataset to test the model's accuracy.
+</div>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+# Input Mode Selector
+# ─────────────────────────────────────────────
 input_col1, input_col2 = st.columns([1, 2])
+
 with input_col1:
     input_mode = st.radio(
         "Data Entry Method",
-        options=["Manual Entry", "Load Sample Data"],
-        horizontal=True,
+        options=["Load Sample Data", "Random Patient Profile", "Manual Entry"],
         label_visibility="collapsed"
     )
 
-if input_mode == "Load Sample Data":
-    with input_col2:
-        sample_type = st.selectbox(
-            "Select a clinical profile:",
-            options=["Malignant Profile (Sample)", "Benign Profile (Sample)"],
+# ─────────────────────────────────────────────
+# Determine default values based on mode
+# ─────────────────────────────────────────────
+true_label = None
+
+with input_col2:
+    if input_mode == "Load Sample Data":
+        sample_choice = st.selectbox(
+            "Select Clinical Profile:",
+            ["Malignant Profile (Expected: Malignant)", "Benign Profile (Expected: Benign)"],
             label_visibility="collapsed"
         )
-    default_values = _malignant_row if "Malignant" in sample_type else _benign_row
-    st.info(f"Loaded a known **{'Malignant' if 'Malignant' in sample_type else 'Benign'}** sample from the dataset. Review the parameters below and run the assessment.")
-else:
-    default_values = _means.tolist()
+        if "Malignant" in sample_choice:
+            default_values = _mal_row
+            true_label     = "Malignant"
+            st.info("Loaded a known Malignant patient record.")
+        else:
+            default_values = _ben_row
+            true_label     = "Benign"
+            st.info("Loaded a known Benign patient record.")
 
-st.write("---")
+    elif input_mode == "Random Patient Profile":
+        if st.button("Draw New Patient Record"):
+            st.session_state["random_idx"] = random.randint(0, len(df) - 1)
+        if "random_idx" not in st.session_state:
+            st.session_state["random_idx"] = random.randint(0, len(df) - 1)
+
+        idx           = st.session_state["random_idx"]
+        rand_row      = df.iloc[idx]
+        default_values= rand_row[FEATURE_NAMES].tolist()
+        actual        = "Malignant" if rand_row["diagnosis"] == 1 else "Benign"
+        true_label    = actual
+        
+        st.info(f"Loaded Patient ID #{idx}. (Ground Truth: **{actual}**)")
+
+    else:
+        default_values = _means.tolist()
+        st.warning("Manual entry activated. Fields pre-filled with dataset means.")
+
+st.divider()
 
 # ─────────────────────────────────────────────
-# Form-based Feature Input Grid
+# Feature Form — Organised in Tabs
 # ─────────────────────────────────────────────
 st.markdown("#### Clinical Parameters")
 
-# We wrap the inputs in a form. This prevents Streamlit from reloading the whole page 
-# every time the user types a single number into one of the 30 inputs.
-with st.form("clinical_data_form"):
+# Wrapping inputs in a form prevents the app from reloading on every keystroke
+with st.form("clinical_parameters_form"):
+    tab1, tab2, tab3 = st.tabs(["Mean Metrics (1-10)", "Standard Error (11-20)", "Worst Metrics (21-30)"])
     
-    # Break 30 features into 3 tabs to reduce cognitive overload
-    tab1, tab2, tab3 = st.tabs(["Parameters 1-10", "Parameters 11-20", "Parameters 21-30"])
-    tabs = [tab1, tab2, tab3]
-    
-    feature_values = []
-    
-    # Distribute features across tabs
-    for i, fname in enumerate(FEATURE_NAMES):
-        tab_idx = i // 10
-        current_tab = tabs[min(tab_idx, 2)]
-        
-        min_val = float(_mins[i])
-        max_val = float(_maxs[i])
-        default = float(default_values[i])
-        default = max(min_val, min(max_val * 2, default))
-        
-        with current_tab:
-            # Group into 2 columns within each tab for a cleaner layout
-            if i % 2 == 0:
-                colA, colB = st.columns(2)
-                container = colA
-            else:
-                container = colB
-                
-            val = container.number_input(
-                label=fname.replace("_", " ").title(), # Cleans up "radius_mean" to "Radius Mean"
-                min_value=min_val,
-                max_value=max_val * 2,
-                value=default,
-                format="%.5f",
-                key=f"feat_{i}"
-            )
-            feature_values.append(val)
-            
+    feature_values = [0.0] * 30
+
+    def render_feature_grid(tab, start, end, description):
+        """Render a 2-column grid of number inputs for features[start:end]."""
+        with tab:
+            st.caption(description)
+            pairs = [(i, FEATURE_NAMES[i]) for i in range(start, end)]
+            rows  = [pairs[i:i+2] for i in range(0, len(pairs), 2)]
+
+            for row in rows:
+                cols = st.columns(2)
+                for col_idx, (feat_idx, fname) in enumerate(row):
+                    display = fname.replace("_", " ").title()
+                    val = cols[col_idx].number_input(
+                        label    = display,
+                        min_value= float(_mins[feat_idx]),
+                        max_value= float(_maxs[feat_idx]) * 2,
+                        value    = float(default_values[feat_idx]),
+                        format   = "%.5f",
+                        key      = f"feat_{feat_idx}",
+                    )
+                    feature_values[feat_idx] = val
+
+    render_feature_grid(tab1, 0,  10, "Average measurements across all evaluated cell nuclei.")
+    render_feature_grid(tab2, 10, 20, "Variance between cells (higher values indicate greater irregularity).")
+    render_feature_grid(tab3, 20, 30, "Most extreme measurements recorded (highly predictive factors).")
+
     st.write("") # Spacer
-    submit_clicked = st.form_submit_button("Run Diagnostic Assessment", type="primary", use_container_width=True)
+    predict_clicked = st.form_submit_button("Run Diagnostic Assessment", type="primary", use_container_width=True)
 
+    # ─────────────────────────────────────────────
+# Prediction Execution & Results
 # ─────────────────────────────────────────────
-# API Call & Results Processing
-# ─────────────────────────────────────────────
-if submit_clicked:
-    with st.spinner("Analyzing clinical parameters..."):
+if predict_clicked:
+    with st.spinner("Processing clinical data..."):
         try:
-            response = requests.post(API_URL, json={"features": feature_values}, timeout=10)
+            resp = requests.post(API_URL, json={"features": feature_values}, timeout=10)
 
-            if response.status_code == 200:
-                result     = response.json()
+            if resp.status_code == 200:
+                result     = resp.json()
                 prediction = result.get("prediction")
-                label      = result.get("label", "Unknown")
+                label      = result.get("label", "")
                 prob       = result.get("probability", {})
 
-                st.write("---")
+                st.markdown("---")
                 st.markdown("### Assessment Results")
 
-                if prediction == 1:   # Malignant
-                    st.markdown(
-                        f'<div class="alert-card alert-malignant">Diagnosis Indication: {label.upper()}</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.warning("The model indicates a high probability of malignancy. Immediate review by an oncologist is recommended.")
-                else:                 # Benign
-                    st.markdown(
-                        f'<div class="alert-card alert-benign">Diagnosis Indication: {label.upper()}</div>',
-                        unsafe_allow_html=True,
-                    )
+                # Diagnostic Output
+                if prediction == 1:
+                    st.markdown(f'<div class="alert-card alert-malignant">Diagnosis Indication: {label.upper()}</div>', unsafe_allow_html=True)
+                    st.warning("The model indicates a high probability of malignancy. Immediate oncology review is recommended.")
+                else:
+                    st.markdown(f'<div class="alert-card alert-benign">Diagnosis Indication: {label.upper()}</div>', unsafe_allow_html=True)
                     st.success("The model indicates a high probability of a benign tumor. Routine observation is advised.")
 
-                # Clean Probability Metrics
+                # Accuracy Check against Dataset
+                if true_label:
+                    predicted_str = "Malignant" if prediction == 1 else "Benign"
+                    if predicted_str == true_label:
+                        st.caption(f"**Verification:** The model successfully matched the dataset ground truth ({true_label}).")
+                    else:
+                        st.caption(f"**Verification:** The model's prediction ({predicted_str}) diverged from the dataset ground truth ({true_label}).")
+
+                # Probability Dashboard
                 st.markdown("#### Confidence Metrics")
                 
-                # Using standard columns and progress bars instead of raw charts for a clinical feel
-                m_prob = prob.get('malignant', 0)
-                b_prob = prob.get('benign', 0)
+                m_prob = prob.get("malignant", 0)
+                b_prob = prob.get("benign", 0)
                 
                 metric_col1, metric_col2 = st.columns(2)
                 with metric_col1:
-                    st.metric("Malignant Probability", f"{m_prob*100:.1f}%")
+                    st.metric("Probability of Malignancy", f"{m_prob*100:.1f}%")
                     st.progress(m_prob)
                 with metric_col2:
-                    st.metric("Benign Probability", f"{b_prob*100:.1f}%")
+                    st.metric("Probability of Benignity", f"{b_prob*100:.1f}%")
                     st.progress(b_prob)
 
+                with st.expander("View Raw System Output"):
+                    st.json(result)
+
             else:
-                error_msg = response.json().get("error", "Unknown error from API.")
-                st.error(f"System Error ({response.status_code}): {error_msg}")
+                st.error(f"System Error {resp.status_code}: {resp.json().get('error', 'Unknown error')}")
 
         except requests.exceptions.ConnectionError:
             st.error(
-                "**Connection Refused:** Unable to communicate with the prediction engine.\n\n"
-                "Ensure the backend service is running (`python api/app.py`)."
+                "**Connection Refused:** Unable to establish a connection with the prediction engine.\n\n"
+                "Please verify the backend service is running."
             )
         except requests.exceptions.Timeout:
-            st.error("**Timeout:** The prediction engine took too long to respond.")
+            st.error("**Timeout:** The prediction engine exceeded the maximum response time.")
         except Exception as exc:
-            st.error(f"**Unexpected Error:** {str(exc)}")
+            st.error(f"**System Exception:** {str(exc)}")
 
 # ─────────────────────────────────────────────
 # Disclaimer
 # ─────────────────────────────────────────────
 st.markdown(
-    '<div class="disclaimer-text">'
-    '<strong>Notice:</strong> This tool is a machine learning prototype designed for educational purposes. '
-    'It does not constitute medical advice and should not be used as a primary diagnostic tool.'
+    '<div class="disclaimer">'
+    '<strong>Notice:</strong> This application is a machine learning prototype designed for educational purposes. '
+    'It does not constitute medical advice, diagnosis, or treatment.'
     '</div>',
     unsafe_allow_html=True,
 )

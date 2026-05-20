@@ -1,7 +1,7 @@
 """
 model/train.py
 Breast Cancer Wisconsin — Logistic Regression Training Script with MLflow Tracking
-Loads data from: ../data.csv  (id, diagnosis[M/B], 30 features)
+Loads data from: data.csv  (id, diagnosis[M/B], 30 features)
 """
 
 import os
@@ -71,7 +71,7 @@ def train() -> None:
     if not os.path.exists(csv_path):
         raise FileNotFoundError(
             f"data.csv not found at: {csv_path}\n"
-            "Place data.csv in the parent folder of breast-cancer-prediction/."
+            "Place data.csv in the breast-cancer-prediction project folder."
         )
 
     df = pd.read_csv(csv_path)
@@ -148,17 +148,14 @@ def train() -> None:
         mlflow.log_metric("f1_score",  f1)
         mlflow.log_metric("roc_auc",   roc_auc)
 
-        # 5f. Log sklearn model
-        mlflow.sklearn.log_model(model, "logistic_regression_model")
-
-        # 5g. Confusion matrix PNG
+        # 5f. Confusion matrix PNG
         cm = confusion_matrix(y_test, y_pred)
         plot_confusion_matrix(cm, labels=target_names, save_path=CM_PATH)
-        mlflow.log_artifact(CM_PATH, artifact_path="plots")
 
-        # 5h. Save & log artifacts
+        # 5g. Save & log artifacts
         joblib.dump(model,  MODEL_PATH)
         joblib.dump(scaler, SCALER_PATH)
+        mlflow.log_artifact(CM_PATH, artifact_path="plots")
         mlflow.log_artifact(MODEL_PATH,  artifact_path="artifacts")
         mlflow.log_artifact(SCALER_PATH, artifact_path="artifacts")
 

@@ -22,6 +22,7 @@ _UI_DIR  = os.path.dirname(os.path.abspath(__file__))
 _PROJ    = os.path.dirname(_UI_DIR)
 _CSV     = os.path.normpath(os.path.join(_PROJ, "data.csv"))
 API_URL  = os.environ.get("API_URL", "http://127.0.0.1:8000/predict")
+APP_VERSION = "2026-05-20-v2"
 
 @st.cache_data
 def load_dataset():
@@ -145,6 +146,7 @@ with st.sidebar:
     * **ROC-AUC:** 99.83%
     """)
     st.divider()
+    st.caption(f"App version: {APP_VERSION}")
     st.caption("Group 2 · Machine Learning Project\nBreast Cancer Wisconsin Dataset")
 
 # ─────────────────────────────────────────────

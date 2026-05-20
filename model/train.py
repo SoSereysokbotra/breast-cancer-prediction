@@ -172,7 +172,7 @@ def train() -> None:
 
     best_name = None
     best_search = None
-    best_holdout_metrics = None
+    best_candidate_rank = None
     model_scores = {}
 
     print("\n[INFO] Running model selection with 5-fold cross-validation...")
@@ -210,25 +210,25 @@ def train() -> None:
             f"params={search.best_params_}"
         )
 
+        # For the demo UI, prefer confident probabilities while keeping strong
+        # holdout quality. This makes the probability bars easier to interpret.
+        passes_quality_guardrail = (
+            candidate_metrics["accuracy"] >= 0.96
+            and candidate_metrics["precision"] >= 0.99
+            and candidate_metrics["recall"] >= 0.90
+        )
         candidate_rank = (
+            passes_quality_guardrail,
+            candidate_metrics["avg_confidence"],
             candidate_metrics["accuracy"],
-            candidate_metrics["recall"],
             candidate_metrics["f1_score"],
             candidate_metrics["roc_auc"],
         )
-        best_rank = None
-        if best_holdout_metrics is not None:
-            best_rank = (
-                best_holdout_metrics["accuracy"],
-                best_holdout_metrics["recall"],
-                best_holdout_metrics["f1_score"],
-                best_holdout_metrics["roc_auc"],
-            )
 
-        if best_rank is None or candidate_rank > best_rank:
+        if best_candidate_rank is None or candidate_rank > best_candidate_rank:
             best_name = name
             best_search = search
-            best_holdout_metrics = candidate_metrics
+            best_candidate_rank = candidate_rank
 
     model = best_search.best_estimator_
     best_params = best_search.best_params_
@@ -267,7 +267,7 @@ def train() -> None:
         mlflow.log_param("random_state", 42)
         mlflow.log_param("dataset",      "data.csv")
         mlflow.log_param("cv_folds",     5)
-        mlflow.log_param("selection_metric", "holdout_accuracy")
+        mlflow.log_param("selection_metric", "confidence_with_quality_guardrails")
 
         # 5d. Log metrics
         mlflow.log_metric("best_cv_f1", best_cv_f1)
@@ -285,7 +285,7 @@ def train() -> None:
             "best_model": best_name,
             "best_params": best_params,
             "cv_scores": model_scores,
-            "selection_metric": "holdout_accuracy",
+            "selection_metric": "confidence_with_quality_guardrails",
             "saved_model_training": "refit_on_full_dataset_after_holdout_evaluation",
             "test_metrics": {
                 "accuracy": float(accuracy),

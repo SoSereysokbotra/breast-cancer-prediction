@@ -1,11 +1,9 @@
 {
-  "best_model": "soft_voting_ensemble",
+  "best_model": "gradient_boosting",
   "best_params": {
-    "weights": [
-      2,
-      1,
-      1
-    ]
+    "learning_rate": 0.1,
+    "max_depth": 3,
+    "n_estimators": 100
   },
   "cv_scores": {
     "logistic_regression": {
@@ -79,14 +77,14 @@
       }
     }
   },
-  "selection_metric": "holdout_accuracy",
+  "selection_metric": "confidence_with_quality_guardrails",
   "saved_model_training": "refit_on_full_dataset_after_holdout_evaluation",
   "test_metrics": {
-    "accuracy": 0.9912280701754386,
+    "accuracy": 0.9649122807017544,
     "precision": 1.0,
-    "recall": 0.9761904761904762,
-    "f1_score": 0.9879518072289156,
-    "roc_auc": 0.9983465608465609
+    "recall": 0.9047619047619048,
+    "f1_score": 0.95,
+    "roc_auc": 0.9947089947089948
   },
   "feature_count": 30,
   "target_encoding": {

@@ -22,7 +22,7 @@ _UI_DIR  = os.path.dirname(os.path.abspath(__file__))
 _PROJ    = os.path.dirname(_UI_DIR)
 _CSV     = os.path.normpath(os.path.join(_PROJ, "data.csv"))
 API_URL  = os.environ.get("API_URL", "http://127.0.0.1:8000/predict")
-APP_VERSION = "2026-05-20-v2"
+APP_VERSION = "2026-05-20-v3"
 
 @st.cache_data
 def load_dataset():
@@ -135,15 +135,15 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 with st.sidebar:
     st.markdown("### Model Information")
     st.markdown("""
-    This application utilizes a tuned **soft-voting ensemble** trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
+    This application utilizes a confidence-focused **gradient boosting model** trained on 569 patient records to evaluate tumor characteristics and predict diagnostic outcomes.
     
     **Instructions:**
     Use **Load Sample Data** or **Random Patient Profile** to auto-populate the assessment fields. Manual entry is reserved for users with active lab measurements.
 
     **Performance Metrics:**
-    * **Accuracy:** 99.12%
+    * **Accuracy:** 96.49%
     * **Precision:** 100.00%
-    * **ROC-AUC:** 99.83%
+    * **ROC-AUC:** 99.47%
     """)
     st.divider()
     st.caption(f"App version: {APP_VERSION}")
@@ -153,7 +153,7 @@ with st.sidebar:
 # Main Header
 # ─────────────────────────────────────────────
 st.markdown('<div class="main-title">Diagnostic Risk Assessment</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">Soft-Voting Ensemble · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">Confidence-Focused Gradient Boosting · Breast Cancer Wisconsin Dataset</div>', unsafe_allow_html=True)
 
 st.markdown("""
 <div class="info-box">
